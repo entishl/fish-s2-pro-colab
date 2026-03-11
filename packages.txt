@@ -1,0 +1,3 @@
+ffmpeg
+libsox-dev
+portaudio19-dev
