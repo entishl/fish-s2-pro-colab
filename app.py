@@ -4,6 +4,7 @@ import subprocess
 import traceback
 import gradio as gr
 import numpy as np
+import librosa
 import spaces
 import torch
 from huggingface_hub import snapshot_download
@@ -22,9 +23,7 @@ sys.path.insert(0, os.getcwd())
 from fish_speech.models.text2semantic.inference import (
     init_model,
     generate_long,
-    load_codec_model,
-    decode_to_audio,
-    encode_audio
+    load_codec_model
 )
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -54,6 +53,24 @@ codec_model = load_codec_model(codec_checkpoint, device=device, precision=precis
 
 print("✅ Todos os modelos carregados com sucesso!")
 
+
+@torch.no_grad()
+def custom_encode_audio(audio_path, codec, device):
+    wav_np, _ = librosa.load(audio_path, sr=codec.sample_rate, mono=True)
+    wav = torch.from_numpy(wav_np).to(device)
+    
+    model_dtype = next(codec.parameters()).dtype
+    audios = wav[None, None, :].to(dtype=model_dtype)
+    audio_lengths = torch.tensor([wav.shape[0]], device=device, dtype=torch.long)
+    
+    indices, feature_lengths = codec.encode(audios, audio_lengths)
+    return indices[0, :, : feature_lengths[0]]
+
+@torch.no_grad()
+def custom_decode_audio(codes, codec):
+    audio = codec.from_indices(codes[None])
+    return audio[0, 0]
+
 @spaces.GPU(duration=120)
 def tts_inference(
     text, 
@@ -69,7 +86,7 @@ def tts_inference(
         prompt_tokens_list = None
         
         if ref_audio is not None and ref_text:
-            prompt_tokens_list = [encode_audio(ref_audio, codec_model, device).cpu()]
+            prompt_tokens_list = [custom_encode_audio(ref_audio, codec_model, device).cpu()]
             
         generator = generate_long(
             model=llama_model,
@@ -99,8 +116,8 @@ def tts_inference(
         if not codes:
             raise gr.Error("Nenhum áudio foi gerado. Verifique o seu texto de entrada.")
             
-        merged_codes = torch.cat(codes, dim=1)
-        audio_waveform = decode_to_audio(merged_codes.to(device), codec_model)
+        merged_codes = torch.cat(codes, dim=1).to(device)
+        audio_waveform = custom_decode_audio(merged_codes, codec_model)
         audio_np = audio_waveform.cpu().float().numpy()
         
         return (codec_model.sample_rate, audio_np)
