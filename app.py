@@ -7,6 +7,7 @@ import numpy as np
 import librosa
 import spaces
 import torch
+from pathlib import Path
 from huggingface_hub import snapshot_download
 
 REPO_URL = "https://github.com/fishaudio/fish-speech.git"
@@ -18,11 +19,7 @@ if not os.path.exists(REPO_DIR):
 os.chdir(REPO_DIR)
 sys.path.insert(0, os.getcwd())
 
-from fish_speech.models.text2semantic.inference import (
-    init_model,
-    generate_long,
-    load_codec_model,
-)
+from fish_speech.models.text2semantic.inference import init_model, generate_long
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 precision = torch.bfloat16
@@ -43,8 +40,33 @@ with torch.device(device):
         dtype=next(llama_model.parameters()).dtype,
     )
 
+
+def load_codec_no_inference_mode(codec_checkpoint_path, target_device, target_precision):
+    from hydra.utils import instantiate
+    from omegaconf import OmegaConf
+
+    config_path = Path("fish_speech/configs/modded_dac_vq.yaml")
+    cfg = OmegaConf.load(str(config_path))
+    codec = instantiate(cfg)
+
+    state_dict = torch.load(codec_checkpoint_path, map_location="cpu")
+    if "state_dict" in state_dict:
+        state_dict = state_dict["state_dict"]
+    if any("generator" in k for k in state_dict):
+        state_dict = {
+            k.replace("generator.", ""): v
+            for k, v in state_dict.items()
+            if "generator." in k
+        }
+
+    codec.load_state_dict(state_dict, strict=False)
+    codec.eval()
+    codec.to(device=target_device, dtype=target_precision)
+    return codec
+
+
 codec_checkpoint = os.path.join(checkpoint_dir, "codec.pth")
-codec_model = load_codec_model(codec_checkpoint, device=device, precision=precision)
+codec_model = load_codec_no_inference_mode(codec_checkpoint, device, precision)
 
 
 @torch.no_grad()
@@ -58,12 +80,10 @@ def encode_reference_audio(audio_path):
     return indices[0, :, : feature_lengths[0]]
 
 
+@torch.no_grad()
 def decode_codes_to_audio(merged_codes):
-    with torch.inference_mode(False):
-        with torch.no_grad():
-            codes_clean = merged_codes.clone()
-            audio = codec_model.from_indices(codes_clean[None])
-            return audio[0, 0]
+    audio = codec_model.from_indices(merged_codes[None])
+    return audio[0, 0]
 
 
 @spaces.GPU(duration=120)
@@ -123,12 +143,6 @@ def tts_inference(
         traceback.print_exc()
         raise gr.Error(f"Inference error: {str(e)}")
 
-
-custom_theme = gr.themes.Soft(
-    primary_hue="blue",
-    secondary_hue="indigo",
-    font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"],
-)
 
 with gr.Blocks(title="Fish Audio S2 Pro") as app:
 
