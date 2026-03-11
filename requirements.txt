@@ -8,6 +8,7 @@ hydra-core
 tensorboard
 natsort
 einops
+torchcodec
 librosa
 rich
 wandb
