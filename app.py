@@ -4,7 +4,7 @@ import subprocess
 import traceback
 import gradio as gr
 import numpy as np
-import torchaudio
+import librosa
 import spaces
 import torch
 from pathlib import Path
@@ -69,15 +69,11 @@ codec_model = load_codec(os.path.join(checkpoint_dir, "codec.pth"), device, prec
 
 @torch.no_grad()
 def encode_reference_audio(audio_path):
-    wav, sr = torchaudio.load(audio_path)
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
-    if sr != codec_model.sample_rate:
-        wav = torchaudio.functional.resample(wav, sr, codec_model.sample_rate)
-    wav = wav.to(device)
+    wav_np, _ = librosa.load(audio_path, sr=codec_model.sample_rate, mono=True)
+    wav = torch.from_numpy(wav_np).to(device)
     model_dtype = next(codec_model.parameters()).dtype
-    audios = wav[None].to(dtype=model_dtype)
-    audio_lengths = torch.tensor([wav.shape[-1]], device=device, dtype=torch.long)
+    audios = wav[None, None, :].to(dtype=model_dtype)
+    audio_lengths = torch.tensor([wav.shape[0]], device=device, dtype=torch.long)
     indices, feature_lengths = codec_model.encode(audios, audio_lengths)
     return indices[0, :, : feature_lengths[0]]
 
