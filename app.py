@@ -116,8 +116,9 @@ def tts_inference(
         if not codes:
             raise gr.Error("Nenhum áudio foi gerado. Verifique o seu texto de entrada.")
             
-        merged_codes = torch.cat(codes, dim=1).to(device)
-        audio_waveform = custom_decode_audio(merged_codes, codec_model)
+        merged_codes = torch.cat(codes, dim=1).to(device).clone()
+        with torch.inference_mode(False):
+            audio_waveform = custom_decode_audio(merged_codes, codec_model)
         audio_np = audio_waveform.cpu().float().numpy()
         
         return (codec_model.sample_rate, audio_np)
