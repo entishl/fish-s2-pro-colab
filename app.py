@@ -109,20 +109,14 @@ def tts_inference(
         traceback.print_exc()
         raise gr.Error(f"Erro na Inferência: {str(e)}")
 
-
 custom_theme = gr.themes.Soft(
     primary_hue="blue",
     secondary_hue="indigo",
     font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"],
-).set(
-    block_title_text_weight="600",
-    block_border_width="1px",
-    block_shadow="0px 2px 4px rgba(0, 0, 0, 0.05)",
-    button_shadow="0px 2px 4px rgba(0, 0, 0, 0.1)",
 )
 
 with gr.Blocks(theme=custom_theme, title="Fish Audio S2 Pro") as app:
-    
+   
     gr.Markdown(
         """
         <div style="text-align: center; max-width: 800px; margin: 0 auto; padding: 20px 0;">
@@ -131,55 +125,55 @@ with gr.Blocks(theme=custom_theme, title="Fish Audio S2 Pro") as app:
             </h1>
             <p style="font-size: 1.1rem; color: #4B5563;">
                 State-of-the-Art Dual-Autoregressive Text-to-Speech.<br>
-                Suporta mais de 80 idiomas, controle emocional no texto (ex: <code>[laugh]</code>, <code>[whisper]</code>) e clonagem de voz Zero-Shot.
+                Supports over 80 languages, emotional control via text tags (e.g. <code>[laugh]</code>, <code>[whisper]</code>) and Zero-Shot voice cloning.
             </p>
         </div>
         """
     )
-    
+   
     with gr.Row():
         with gr.Column(scale=5):
-            gr.Markdown("### ✍️ Texto de Entrada")
+            gr.Markdown("### ✍️ Input Text")
             text_input = gr.Textbox(
                 show_label=False,
-                placeholder="Digite o texto que você deseja sintetizar aqui.\nTente adicionar tags como [laugh], [whisper], ou [angry]!", 
+                placeholder="Type the text you want to synthesize here.\nTry adding tags like [laugh], [whisper], or [angry]!",
                 lines=7
             )
-            
-            with gr.Accordion("🎙️ Clonagem de Voz (Referência Opcional)", open=False):
-                gr.Markdown("Faça upload de um áudio limpo de 5 a 10 segundos e digite exatamente o que é dito nele para clonar a voz.")
-                ref_audio = gr.Audio(label="Áudio de Referência", type="filepath")
-                ref_text = gr.Textbox(label="Texto do Áudio", placeholder="Transcrição exata do áudio de referência...")
-            
-            with gr.Accordion("⚙️ Configurações Avançadas", open=False):
+           
+            with gr.Accordion("🎙️ Voice Cloning (Optional Reference)", open=False):
+                gr.Markdown("Upload a clean 5–10 second audio clip and type exactly what is said in it to clone the voice.")
+                ref_audio = gr.Audio(label="Reference Audio", type="filepath")
+                ref_text = gr.Textbox(label="Reference Audio Text", placeholder="Exact transcription of the reference audio...")
+           
+            with gr.Accordion("⚙️ Advanced Settings", open=False):
                 with gr.Row():
-                    max_new_tokens = gr.Slider(0, 2048, 1024, step=8, label="Max New Tokens (0 = sem limite)")
-                    chunk_length = gr.Slider(100, 400, 200, step=8, label="Tamanho do Chunk")
+                    max_new_tokens = gr.Slider(0, 2048, 1024, step=8, label="Max New Tokens (0 = no limit)")
+                    chunk_length = gr.Slider(100, 400, 200, step=8, label="Chunk Length")
                 with gr.Row():
                     top_p = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Top-P")
-                    repetition_penalty = gr.Slider(0.9, 2.0, 1.2, step=0.01, label="Penalidade de Repetição")
-                    temperature = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Temperatura")
-                
-            generate_btn = gr.Button("🚀 Gerar Áudio", variant="primary", size="lg")
-            
+                    repetition_penalty = gr.Slider(0.9, 2.0, 1.2, step=0.01, label="Repetition Penalty")
+                    temperature = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Temperature")
+               
+            generate_btn = gr.Button("🚀 Generate Audio", variant="primary", size="lg")
+           
         with gr.Column(scale=4):
-            gr.Markdown("### 🎧 Resultado")
-            audio_output = gr.Audio(label="Áudio Gerado", type="numpy", interactive=False, autoplay=True)
-            
+            gr.Markdown("### 🎧 Result")
+            audio_output = gr.Audio(label="Generated Audio", type="numpy", interactive=False, autoplay=True)
+           
             gr.Markdown(
                 """
                 <div style="background-color: #EFF6FF; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                    <h4 style="margin-top: 0; color: #1D4ED8;">💡 Dicas Profissionais</h4>
+                    <h4 style="margin-top: 0; color: #1D4ED8;">💡 Pro Tips</h4>
                     <ul style="margin-bottom: 0; color: #1E3A8A; font-size: 0.95rem;">
-                        <li>O modelo compreende texto natural perfeitamente, sem necessidade de fonemas manuais.</li>
-                        <li>Envolva palavras com colchetes para ditar emoções. Ex: <i>[pitch up] Uau! [laugh]</i>.</li>
-                        <li>Para clonagem, quanto mais exata a transcrição do áudio de base, melhor o resultado.</li>
+                        <li>The model understands natural text perfectly — no need for manual phonemes.</li>
+                        <li>Wrap words in brackets to control emotion. Example: <i>[pitch up] Wow! [laugh]</i></li>
+                        <li>For cloning, the more accurate the transcription of the reference audio, the better the result.</li>
                     </ul>
                 </div>
                 """
             )
-            
-    gr.Markdown("### 🌟 Exemplos")
+           
+    gr.Markdown("### 🌟 Examples")
     gr.Examples(
         examples=[
             ["Hello world! This is a test of the Fish Audio S2 Pro model.", None, "", 1024, 200, 0.7, 1.2, 0.7],
@@ -192,6 +186,7 @@ with gr.Blocks(theme=custom_theme, title="Fish Audio S2 Pro") as app:
         cache_examples=False,
     )
     
+    # Evento de clique do botão
     generate_btn.click(
         fn=tts_inference,
         inputs=[text_input, ref_audio, ref_text, max_new_tokens, chunk_length, top_p, repetition_penalty, temperature],
