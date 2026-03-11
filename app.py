@@ -1,15 +1,23 @@
 import os
 import sys
+import subprocess
 import traceback
-from pathlib import Path
-
 import gradio as gr
 import numpy as np
 import spaces
 import torch
 from huggingface_hub import snapshot_download
 
-sys.path.append(str(Path(__file__).parent))
+REPO_URL = "https://github.com/fishaudio/fish-speech.git"
+REPO_DIR = "fish-speech"
+
+if not os.path.exists(REPO_DIR):
+    print(f"Clonando o repositório de {REPO_URL}...")
+    subprocess.run(["git", "clone", REPO_URL, REPO_DIR], check=True)
+    print("Repositório clonado com sucesso!")
+
+os.chdir(REPO_DIR)
+sys.path.insert(0, os.getcwd())
 
 from fish_speech.models.text2semantic.inference import (
     init_model,
@@ -19,14 +27,13 @@ from fish_speech.models.text2semantic.inference import (
     encode_audio
 )
 
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 precision = torch.bfloat16
 
-print("Downloading Fish Audio S2 Pro weights...")
+print("Baixando os pesos do Fish Audio S2 Pro...")
 checkpoint_dir = snapshot_download(repo_id="fishaudio/s2-pro")
 
-print("Loading LLAMA model...")
+print("Carregando o modelo LLAMA (isso pode levar alguns instantes)...")
 llama_model, decode_one_token = init_model(
     checkpoint_path=checkpoint_dir, 
     device=device, 
@@ -41,13 +48,11 @@ with torch.device(device):
         dtype=next(llama_model.parameters()).dtype,
     )
 
-print("Loading Codec model...")
+print("Carregando o modelo Codec (VQGAN)...")
 codec_checkpoint = os.path.join(checkpoint_dir, "codec.pth")
 codec_model = load_codec_model(codec_checkpoint, device=device, precision=precision)
 
-print("All models loaded successfully!")
-
-
+print("✅ Todos os modelos carregados com sucesso!")
 
 @spaces.GPU(duration=120)
 def tts_inference(
@@ -60,10 +65,6 @@ def tts_inference(
     repetition_penalty, 
     temperature
 ):
-    """
-    Main TTS Generation function decorated with @spaces.GPU 
-    to request GPU allocation only during execution.
-    """
     try:
         prompt_tokens_list = None
         
@@ -96,7 +97,7 @@ def tts_inference(
                 break
                 
         if not codes:
-            raise gr.Error("No audio generated. Please check your text.")
+            raise gr.Error("Nenhum áudio foi gerado. Verifique o seu texto de entrada.")
             
         merged_codes = torch.cat(codes, dim=1)
         audio_waveform = decode_to_audio(merged_codes.to(device), codec_model)
@@ -106,7 +107,7 @@ def tts_inference(
 
     except Exception as e:
         traceback.print_exc()
-        raise gr.Error(f"Inference Error: {str(e)}")
+        raise gr.Error(f"Erro na Inferência: {str(e)}")
 
 
 custom_theme = gr.themes.Soft(
@@ -129,8 +130,8 @@ with gr.Blocks(theme=custom_theme, title="Fish Audio S2 Pro") as app:
                 🐟 Fish Audio S2 Pro
             </h1>
             <p style="font-size: 1.1rem; color: #4B5563;">
-                State-of-the-Art Dual-Autoregressive Text-to-Speech.
-                Supports 80+ languages, emotional inline control (e.g., <code>[laugh]</code>, <code>[whisper]</code>), and zero-shot voice cloning.
+                State-of-the-Art Dual-Autoregressive Text-to-Speech.<br>
+                Suporta mais de 80 idiomas, controle emocional no texto (ex: <code>[laugh]</code>, <code>[whisper]</code>) e clonagem de voz Zero-Shot.
             </p>
         </div>
         """
@@ -138,47 +139,47 @@ with gr.Blocks(theme=custom_theme, title="Fish Audio S2 Pro") as app:
     
     with gr.Row():
         with gr.Column(scale=5):
-            gr.Markdown("### ✍️ Text Input")
+            gr.Markdown("### ✍️ Texto de Entrada")
             text_input = gr.Textbox(
                 show_label=False,
-                placeholder="Enter the text you want to synthesize here.\nTry adding tags like [laugh], [whisper], or [angry]!", 
+                placeholder="Digite o texto que você deseja sintetizar aqui.\nTente adicionar tags como [laugh], [whisper], ou [angry]!", 
                 lines=7
             )
             
-            with gr.Accordion("🎙️ Voice Cloning (Optional Reference)", open=False):
-                gr.Markdown("Upload a 5-10 second clear audio clip and type its exact transcription to clone the voice.")
-                ref_audio = gr.Audio(label="Reference Audio", type="filepath")
-                ref_text = gr.Textbox(label="Reference Text", placeholder="Transcription of the reference audio...")
+            with gr.Accordion("🎙️ Clonagem de Voz (Referência Opcional)", open=False):
+                gr.Markdown("Faça upload de um áudio limpo de 5 a 10 segundos e digite exatamente o que é dito nele para clonar a voz.")
+                ref_audio = gr.Audio(label="Áudio de Referência", type="filepath")
+                ref_text = gr.Textbox(label="Texto do Áudio", placeholder="Transcrição exata do áudio de referência...")
             
-            with gr.Accordion("⚙️ Advanced Settings", open=False):
+            with gr.Accordion("⚙️ Configurações Avançadas", open=False):
                 with gr.Row():
-                    max_new_tokens = gr.Slider(0, 2048, 1024, step=8, label="Max New Tokens (0 = unlimited)")
-                    chunk_length = gr.Slider(100, 400, 200, step=8, label="Chunk Length")
+                    max_new_tokens = gr.Slider(0, 2048, 1024, step=8, label="Max New Tokens (0 = sem limite)")
+                    chunk_length = gr.Slider(100, 400, 200, step=8, label="Tamanho do Chunk")
                 with gr.Row():
                     top_p = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Top-P")
-                    repetition_penalty = gr.Slider(0.9, 2.0, 1.2, step=0.01, label="Repetition Penalty")
-                    temperature = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Temperature")
+                    repetition_penalty = gr.Slider(0.9, 2.0, 1.2, step=0.01, label="Penalidade de Repetição")
+                    temperature = gr.Slider(0.1, 1.0, 0.7, step=0.01, label="Temperatura")
                 
-            generate_btn = gr.Button("🚀 Generate Speech", variant="primary", size="lg")
+            generate_btn = gr.Button("🚀 Gerar Áudio", variant="primary", size="lg")
             
         with gr.Column(scale=4):
-            gr.Markdown("### 🎧 Output")
-            audio_output = gr.Audio(label="Generated Audio", type="numpy", interactive=False, autoplay=True)
+            gr.Markdown("### 🎧 Resultado")
+            audio_output = gr.Audio(label="Áudio Gerado", type="numpy", interactive=False, autoplay=True)
             
             gr.Markdown(
                 """
                 <div style="background-color: #EFF6FF; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                    <h4 style="margin-top: 0; color: #1D4ED8;">💡 Pro Tips</h4>
+                    <h4 style="margin-top: 0; color: #1D4ED8;">💡 Dicas Profissionais</h4>
                     <ul style="margin-bottom: 0; color: #1E3A8A; font-size: 0.95rem;">
-                        <li>You don't need phonemes, the model understands raw text seamlessly.</li>
-                        <li>Try wrapping specific words in brackets for inline emotional control.</li>
-                        <li>For cloning, the closer the transcript matches the audio, the better the result.</li>
+                        <li>O modelo compreende texto natural perfeitamente, sem necessidade de fonemas manuais.</li>
+                        <li>Envolva palavras com colchetes para ditar emoções. Ex: <i>[pitch up] Uau! [laugh]</i>.</li>
+                        <li>Para clonagem, quanto mais exata a transcrição do áudio de base, melhor o resultado.</li>
                     </ul>
                 </div>
                 """
             )
             
-    gr.Markdown("### 🌟 Examples")
+    gr.Markdown("### 🌟 Exemplos")
     gr.Examples(
         examples=[
             ["Hello world! This is a test of the Fish Audio S2 Pro model.", None, "", 1024, 200, 0.7, 1.2, 0.7],
