@@ -84,6 +84,37 @@ def decode_codes_to_audio(merged_codes):
     return audio[0, 0]
 
 
+whisper_model = None
+
+
+def get_whisper_model():
+    global whisper_model
+    if whisper_model is None:
+        from faster_whisper import WhisperModel
+        whisper_model = WhisperModel("large-v3", device="cuda", compute_type="int8")
+    return whisper_model
+
+
+@spaces.GPU(duration=60)
+def transcribe_audio(audio_path):
+    if audio_path is None:
+        raise gr.Error("Please upload a reference audio file first.")
+    try:
+        gr.Info("Transcribing audio with Whisper large-v3...")
+        model = get_whisper_model()
+        segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True)
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        if not text:
+            raise gr.Error("Whisper could not detect any speech in the audio.")
+        gr.Info(f"Detected language: {info.language} ({info.language_probability:.0%} confidence)")
+        return text
+    except gr.Error:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise gr.Error(f"Transcription error: {str(e)}")
+
+
 def estimate_duration(text):
     words = len(text.split())
     seconds = max(5, int(words * 0.4))
@@ -209,9 +240,10 @@ with gr.Blocks(title="Fish Audio S2 Pro") as app:
                     "The model will clone that voice for synthesis. Language is inferred automatically."
                 )
                 ref_audio = gr.Audio(label="Reference Audio", type="filepath")
+                transcribe_btn = gr.Button("🎤 Auto-transcribe with Whisper", variant="secondary", size="sm")
                 ref_text = gr.Textbox(
                     label="Reference Audio Transcription",
-                    placeholder="Exact transcription of the reference audio...",
+                    placeholder="Exact transcription of the reference audio, or click Auto-transcribe above...",
                 )
 
             with gr.Accordion("⚙️ Advanced Settings", open=False):
@@ -278,6 +310,12 @@ with gr.Blocks(title="Fish Audio S2 Pro") as app:
         outputs=[audio_output],
         fn=tts_inference,
         cache_examples=False,
+    )
+
+    transcribe_btn.click(
+        fn=transcribe_audio,
+        inputs=[ref_audio],
+        outputs=[ref_text],
     )
 
     generate_btn.click(
