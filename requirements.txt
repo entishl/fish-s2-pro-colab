@@ -5,6 +5,7 @@ transformers
 datasets
 lightning
 hydra-core
+faster-whisper
 tensorboard
 natsort
 einops
