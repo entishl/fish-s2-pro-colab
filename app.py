@@ -90,7 +90,7 @@ def estimate_duration(text):
     return seconds
 
 
-@spaces.GPU(duration=120)
+@spaces.GPU(duration=180)
 def tts_inference(
     text,
     ref_audio,
