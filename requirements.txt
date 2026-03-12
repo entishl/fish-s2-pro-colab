@@ -35,3 +35,4 @@ descript-audiotools
 safetensors
 huggingface_hub
 gradio>5.0.0
+hf_transfer

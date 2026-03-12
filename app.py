@@ -34,6 +34,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 precision = torch.bfloat16 if device == "cuda" else torch.float32
 
 # --- Model Loading ---
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 print(f"Downloading model from {MODEL_REPO_ID} (using HF_TOKEN if available)...")
 hf_token = os.getenv("HF_TOKEN")
 checkpoint_dir = snapshot_download(
