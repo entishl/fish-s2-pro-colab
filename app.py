@@ -41,6 +41,17 @@ checkpoint_dir = snapshot_download(
     token=hf_token
 )
 
+# Patch safetensors and torch defaults to avoid CPU OOM
+original_load_file = None
+if device == "cuda":
+    import safetensors.torch
+    original_load_file = safetensors.torch.load_file
+    def patched_load_file(filename, device="cpu"):
+        return original_load_file(filename, device="cuda" if torch.cuda.is_available() else "cpu")
+    safetensors.torch.load_file = patched_load_file
+    torch.set_default_device("cuda")
+    torch.set_default_dtype(precision)
+
 print(f"Initializing Llama model on {device}...")
 llama_model, decode_one_token = init_model(
     checkpoint_path=checkpoint_dir,
@@ -48,6 +59,11 @@ llama_model, decode_one_token = init_model(
     precision=precision,
     compile=False,
 )
+
+if device == "cuda":
+    torch.set_default_device("cpu")
+    torch.set_default_dtype(torch.float32)
+    safetensors.torch.load_file = original_load_file
 
 if device == "cuda":
     with torch.device(device):
